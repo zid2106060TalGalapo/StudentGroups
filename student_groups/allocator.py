@@ -70,7 +70,6 @@ class GroupAllocator:
         min_group_count = max(1, ceil(total_students / self.max_group_size))
         max_group_count = max(1, floor(total_students / self.min_group_size))
         feasible_group_count = min(len(offered_projects), max_group_count)
-        active_group_count = min(max(desired_group_count, min_group_count), feasible_group_count)
 
         demand_scores = {project.project_name: 0 for project in offered_projects}
         for student in students:
@@ -82,16 +81,35 @@ class GroupAllocator:
             offered_projects,
             key=lambda item: (-demand_scores[item.project_name], item.project_name),
         )
-        active_projects = sorted_projects[:active_group_count]
 
-        base_capacity = total_students // active_group_count
-        remainder = total_students % active_group_count
+        best_count = min(max(desired_group_count, min_group_count), feasible_group_count)
+        best_score = float("-inf")
+        best_projects = sorted_projects[:best_count]
+
+        for group_count in range(min_group_count, feasible_group_count + 1):
+            active_projects = sorted_projects[:group_count]
+            capacities = self._capacities(total_students, group_count)
+            metadata_fit = sum(
+                1
+                for project, capacity in zip(active_projects, capacities)
+                if project.min_team_size <= capacity <= project.max_team_size
+            )
+            target_gap = abs(group_count - desired_group_count)
+            score = (metadata_fit * 100.0) - target_gap
+            if score > best_score:
+                best_score = score
+                best_count = group_count
+                best_projects = active_projects
 
         groups: Dict[str, Group] = {}
-        for index, project in enumerate(active_projects):
-            capacity = base_capacity + (1 if index < remainder else 0)
+        for project, capacity in zip(best_projects, self._capacities(total_students, best_count)):
             groups[project.project_name] = Group(project=project, capacity=max(1, capacity))
         return groups
+
+    def _capacities(self, total_students: int, group_count: int) -> List[int]:
+        base_capacity = total_students // group_count
+        remainder = total_students % group_count
+        return [base_capacity + (1 if index < remainder else 0) for index in range(group_count)]
 
     def _cohort_gender_ratio(self, students: List[Student]) -> Dict[str, float]:
         counts: Dict[str, int] = {}

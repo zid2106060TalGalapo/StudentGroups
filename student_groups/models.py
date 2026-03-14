@@ -21,9 +21,12 @@ REQUIRED_COLUMNS = [
 ]
 
 PROJECT_REQUIRED_COLUMNS = [
-    "ProjectID",
-    "ProjectName",
-    "Description",
+    "project_id",
+    "project_name",
+    "description",
+    "difficulty",
+    "min_team_size",
+    "max_team_size",
 ]
 
 
@@ -43,6 +46,9 @@ class Project:
     project_id: str
     project_name: str
     description: str
+    difficulty: str
+    min_team_size: int
+    max_team_size: int
 
 
 @dataclass

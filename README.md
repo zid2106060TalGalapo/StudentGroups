@@ -1,22 +1,27 @@
 # Student Grouping Optimiser
 
-A simple agentic AI demo that reads a CSV of students, allocates them to project groups, and then produces:
+A simple agentic AI demo that reads `data/students.csv`, queries project metadata from `data/projects.json` through a small MCP-style tool, allocates students to project groups, and then produces:
 
 - a teacher-facing allocation report
 - a CSV of final group assignments
 - draft group emails with all student emails included in the `to` field
 
-The workflow keeps a deterministic baseline allocator for reproducibility, then adds a lightweight agentic optimisation phase that sets goals, explores non-deterministic alternatives, and keeps the best result. An open LLM through local [Ollama](https://ollama.com/) can guide the goal-setting and reporting steps. If Ollama is not running, the app still completes the workflow with heuristic fallback logic.
+The workflow keeps the deterministic allocator in code as a reference path, but the demo focuses on the agentic layer: the agent sets goals, calls an MCP-style project context tool, explores candidate allocations, verifies project fit, and selects the final result. An open LLM through local [Ollama](https://ollama.com/) can guide the goal-setting and reporting steps. If Ollama is not running, the app still completes the workflow with heuristic fallback logic.
 
-## Expected CSV format
+## Expected input files
 
-The input students.csv file must contain these columns:
+`data/students.csv` must contain:
 
 `StudentID,Name,Gender,Nationality,Major,Email,PreferredProject1,PreferredProject2,PreferredProject3`
 
-The input projects.csv file must contain these columns:
+`data/projects.json` must contain project metadata including:
 
-`ProjectID,ProjectName,Description`
+- `project_id`
+- `project_name`
+- `description`
+- `difficulty`
+- `min_team_size`
+- `max_team_size`
 
 ## Quick start
 
@@ -30,24 +35,21 @@ ollama pull llama3.1:8b
 2. Run the demo:
 
 ```bash
-python app.py --input sample_data/students.csv --projects sample_data/projects.csv --output-dir output --min-group-size 3 --max-group-size 5
+python app.py --input data/students.csv --projects data/projects.json --output-dir output --min-group-size 3 --max-group-size 5
 ```
-
-You can adjust `--min-group-size` and `--max-group-size` to control the range of group sizes (default is 4-6).
-
-No third-party Python packages are required for the fallback workflow.
 
 ## Agentic flow
 
-1. `IngestionAgent` loads students and offered projects.
-2. `GoalSettingAgent` decides optimisation priorities for preferences, fairness, and equal group size.
-3. `AllocationAgent` builds a deterministic baseline, then runs a non-deterministic search over alternative allocations.
-4. `EvaluationAgent` scores candidates and keeps the best result.
-5. `ReportingAgent` explains the final allocation and reports any improvement over baseline.
-6. `EmailAgent` drafts one email per group.
+1. `IngestionAgent` loads students.
+2. `ProjectContextMCPTool` loads `projects.json` and exposes project metadata as external context.
+3. `GoalSettingAgent` decides optimisation priorities.
+4. `AllocationAgent` generates candidate allocations while prioritising groups that stay inside each selected project's MCP min-max team-size range.
+5. `VerificationAgent` queries the MCP tool to check whether each final group fits the project's difficulty and recommended team size.
+6. `ReportingAgent` explains the final allocation and the reasoning for each group.
+7. `EmailAgent` drafts one email per group.
 
 ## Notes
 
-- The deterministic baseline remains the reference point.
-- The agentic phase does not blindly replace it. It must beat the baseline according to its stated goals.
+- The MCP-style tool keeps the demo concise while still showing external tool access during reasoning.
 - Not all offered projects need to be used.
+- The teacher report includes per-group reasoning based on project difficulty and recommended team size.
