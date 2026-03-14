@@ -17,12 +17,21 @@ class OllamaClient:
         self.model = model
         self.url = url
 
-    def generate(self, prompt: str, system_prompt: Optional[str] = None) -> LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        seed: Optional[int] = None,
+    ) -> LLMResponse:
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "options": {"temperature": temperature},
         }
+        if seed is not None:
+            payload["options"]["seed"] = seed
         if system_prompt:
             payload["system"] = system_prompt
 
@@ -35,7 +44,7 @@ class OllamaClient:
         )
 
         try:
-            with request.urlopen(http_request, timeout=60) as response:
+            with request.urlopen(http_request, timeout=12) as response:
                 data = json.loads(response.read().decode("utf-8"))
         except (error.URLError, TimeoutError, json.JSONDecodeError):
             return LLMResponse(text="", used_model=False)
