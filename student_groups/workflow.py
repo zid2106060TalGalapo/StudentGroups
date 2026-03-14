@@ -456,6 +456,27 @@ def build_allocation_summary(run: AgenticRun) -> str:
     return "\n".join(lines)
 
 
+
+def _ascii_bar(value: float, maximum: float, width: int = 24) -> str:
+    if maximum <= 0:
+        return "[" + ("-" * width) + "]"
+    filled = max(0, min(width, round((value / maximum) * width)))
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+
+
+def _visual_summary_lines(run: AgenticRun) -> List[str]:
+    counts = run.result.preference_counts
+    total_students = max(1, sum(counts.values()))
+    group_count = max(1, len(run.result.groups))
+    fit_count = sum(1 for assessment in run.group_assessments.values() if assessment.size_ok)
+    return [
+        "## Visual Snapshot",
+        f"- Fairness              {_ascii_bar(run.result.fairness_score, 100)} {run.result.fairness_score:.1f}/100",
+        f"- Project size fit      {_ascii_bar(fit_count, group_count)} {fit_count}/{group_count} groups",
+        f"- First-choice matches  {_ascii_bar(counts['first_choice'], total_students)} {counts['first_choice']}/{total_students}",
+        f"- Outside preferences   {_ascii_bar(total_students - counts['outside_preferences'], total_students)} {counts['outside_preferences']} students outside top 3",
+        "",
+    ]
 def fallback_teacher_report(run: AgenticRun) -> str:
     result = run.result
     lines = [
@@ -468,7 +489,7 @@ def fallback_teacher_report(run: AgenticRun) -> str:
         f"- Goal weights: preference={run.goals.preference_weight:.2f}, fairness={run.goals.fairness_weight:.2f}, size={run.goals.size_weight:.2f}",
         f"- Search iterations: {run.goals.search_iterations}",
         f"- Goal source: {'LLM-guided' if run.goals.used_model else 'heuristic fallback'}",
-        "", "## MCP Reasoning", f"- MCP verification summary: {run.verification_summary}", "", "## Performance",
+        "", "## MCP Reasoning", f"- MCP verification summary: {run.verification_summary}", "", *_visual_summary_lines(run), "## Performance",
         f"- Final strategy: {result.strategy}", f"- Selection score: {run.score}", f"- Fairness score: {result.fairness_score}",
         f"- Average preference rank: {result.average_preference_rank:.2f}", f"- First choices satisfied: {result.preference_counts['first_choice']}",
         f"- Second choices satisfied: {result.preference_counts['second_choice']}", f"- Third choices satisfied: {result.preference_counts['third_choice']}",
@@ -509,3 +530,4 @@ def fallback_email_body(group) -> str:
         "Please introduce yourselves, arrange an initial meeting, and begin discussing how you would like to approach the project.\n\n"
         "Best regards,\nCourse Team"
     )
+

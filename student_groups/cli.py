@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
+from student_groups.ui import launch_demo_app
 from student_groups.workflow import DEFAULT_TEACHER_PROMPT, StudentGroupingWorkflow
 
 
@@ -26,12 +28,19 @@ def build_parser() -> argparse.ArgumentParser:
         default="http://localhost:11434/api/generate",
         help="Ollama generate endpoint",
     )
+    parser.add_argument("--gui", action="store_true", help="Launch the desktop demo interface")
     return parser
 
 
 
 def main() -> int:
+    if len(sys.argv) == 1:
+        return launch_demo_app()
+
     args = build_parser().parse_args()
+    if args.gui:
+        return launch_demo_app()
+
     workflow = StudentGroupingWorkflow(
         target_group_size=args.group_size,
         min_group_size=args.min_group_size,

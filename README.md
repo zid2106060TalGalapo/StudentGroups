@@ -32,11 +32,23 @@ ollama serve
 ollama pull llama3.1:8b
 ```
 
-2. Run the demo:
+2. Launch the demo window:
+
+```bash
+python app.py
+```
+
+3. Or run the workflow directly from the command line:
 
 ```bash
 python app.py --input data/students.csv --projects data/projects.json --output-dir output --teacher-prompt "Try to maximise student preferences but still maintain fairness."
 ```
+
+## Demo UI
+
+- Running `python app.py` with no arguments opens a simple desktop demo window.
+- The popup lets the teacher choose input files, group-size limits, and the teacher prompt.
+- After the run, the right-hand panel shows a professional summary of the allocation, key metrics, group sizes, and the full teacher report.
 
 ## Agentic flow
 
