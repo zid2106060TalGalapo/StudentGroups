@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from math import ceil
+from math import ceil, floor
 from typing import Dict, List, Tuple
 
 from student_groups.models import Group, Project, Student, normalize_gender
@@ -22,29 +22,44 @@ class AllocationResult:
     preference_counts: Dict[str, int]
     average_preference_rank: float
     fairness_score: float
+    strategy: str = "deterministic"
 
 
 class GroupAllocator:
-    def __init__(self, target_group_size: int = 4, seed: int = 42):
+    def __init__(self, target_group_size: int = 4, min_group_size: int = 3, max_group_size: int = 5, seed: int = 42):
         self.target_group_size = max(2, target_group_size)
-        self.random = random.Random(seed)
+        self.min_group_size = max(2, min_group_size)
+        self.max_group_size = max(self.min_group_size, max_group_size)
+        self.seed = seed
 
-    def allocate(self, students: List[Student], offered_projects: List[Project]) -> AllocationResult:
+    def allocate(
+        self,
+        students: List[Student],
+        offered_projects: List[Project],
+        seed: int | None = None,
+        randomize: bool = False,
+        strategy: str = "deterministic",
+    ) -> AllocationResult:
+        rng = random.Random(self.seed if seed is None else seed)
         groups = self._build_groups(students, offered_projects)
         cohort_gender_ratio = self._cohort_gender_ratio(students)
-
-        ordered_students = sorted(
-            students,
-            key=lambda student: self._student_priority(student),
-            reverse=True,
-        )
+        ordered_students = self._ordered_students(students, rng, randomize)
 
         for student in ordered_students:
-            project_name = self._best_group_for_student(student, groups, cohort_gender_ratio)
+            project_name = self._best_group_for_student(student, groups, cohort_gender_ratio, rng)
             groups[project_name].students.append(student)
 
         self._improve_via_swaps(groups, cohort_gender_ratio)
-        return self._build_result(groups, students, cohort_gender_ratio)
+        return self._build_result(groups, students, cohort_gender_ratio, strategy)
+
+    def _ordered_students(self, students: List[Student], rng: random.Random, randomize: bool) -> List[Student]:
+        if not randomize:
+            return sorted(students, key=lambda student: self._student_priority(student), reverse=True)
+        return sorted(
+            students,
+            key=lambda student: (self._student_priority(student), rng.random()),
+            reverse=True,
+        )
 
     def _build_groups(self, students: List[Student], offered_projects: List[Project]) -> Dict[str, Group]:
         if not offered_projects:
@@ -52,7 +67,10 @@ class GroupAllocator:
 
         total_students = len(students)
         desired_group_count = max(1, ceil(total_students / self.target_group_size))
-        active_group_count = min(len(offered_projects), desired_group_count)
+        min_group_count = max(1, ceil(total_students / self.max_group_size))
+        max_group_count = max(1, floor(total_students / self.min_group_size))
+        feasible_group_count = min(len(offered_projects), max_group_count)
+        active_group_count = min(max(desired_group_count, min_group_count), feasible_group_count)
 
         demand_scores = {project.project_name: 0 for project in offered_projects}
         for student in students:
@@ -93,6 +111,7 @@ class GroupAllocator:
         student: Student,
         groups: Dict[str, Group],
         cohort_gender_ratio: Dict[str, float],
+        rng: random.Random,
     ) -> str:
         best_cost = float("inf")
         best_projects: List[str] = []
@@ -105,7 +124,7 @@ class GroupAllocator:
             elif abs(cost - best_cost) <= TIE_BREAK_EPSILON:
                 best_projects.append(project_name)
 
-        return self.random.choice(best_projects)
+        return rng.choice(best_projects)
 
     def _assignment_cost(
         self,
@@ -183,7 +202,6 @@ class GroupAllocator:
             for right_student in list(right_group.students):
                 new_left = [student for student in left_group.students if student != left_student] + [right_student]
                 new_right = [student for student in right_group.students if student != right_student] + [left_student]
-
                 trial_left = Group(project=left_group.project, capacity=left_group.capacity, students=new_left)
                 trial_right = Group(project=right_group.project, capacity=right_group.capacity, students=new_right)
                 new_cost = self._group_cost(trial_left, cohort_gender_ratio) + self._group_cost(
@@ -207,10 +225,10 @@ class GroupAllocator:
         groups: Dict[str, Group],
         students: List[Student],
         cohort_gender_ratio: Dict[str, float],
+        strategy: str,
     ) -> AllocationResult:
         preference_counts = {"first_choice": 0, "second_choice": 0, "third_choice": 0, "outside_preferences": 0}
         preference_rank_total = 0
-
         student_projects = {}
         for group in groups.values():
             for member in group.students:
@@ -241,6 +259,7 @@ class GroupAllocator:
             preference_counts=preference_counts,
             average_preference_rank=average_rank,
             fairness_score=round(fairness_score, 2),
+            strategy=strategy,
         )
 
     def _group_fairness_score(self, group: Group, cohort_gender_ratio: Dict[str, float]) -> float:

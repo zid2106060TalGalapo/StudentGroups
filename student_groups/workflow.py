@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -16,6 +17,25 @@ class WorkflowOutputs:
     allocations_path: Path
     report_path: Path
     emails_path: Path
+
+
+@dataclass
+class AllocationGoals:
+    preference_weight: float
+    fairness_weight: float
+    size_weight: float
+    search_iterations: int
+    reasoning: str
+    used_model: bool
+
+
+@dataclass
+class AgenticRun:
+    result: AllocationResult
+    goals: AllocationGoals
+    score: float
+    verification_summary: str
+    diversity_summary: str
 
 
 class IngestionAgent:
@@ -70,33 +90,164 @@ class IngestionAgent:
             raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
 
-class AllocationAgent:
-    def __init__(self, target_group_size: int):
-        self.allocator = GroupAllocator(target_group_size=target_group_size)
+class GoalSettingAgent:
+    def __init__(self, llm_client: OllamaClient):
+        self.llm_client = llm_client
 
-    def run(self, students: List[Student], projects: List[Project]) -> AllocationResult:
-        return self.allocator.allocate(students, projects)
+    def run(self, students: List[Student], projects: List[Project]) -> AllocationGoals:
+        prompt = (
+            "Set goals for an autonomous student grouping agent.\n"
+            "Return exactly these lines:\n"
+            "preference_weight=<number>\n"
+            "fairness_weight=<number>\n"
+            "size_weight=<number>\n"
+            "search_iterations=<integer between 8 and 30>\n"
+            "reasoning=<one short sentence>\n\n"
+            f"Students={len(students)}, Projects={len(projects)}"
+        )
+        response = self.llm_client.generate(prompt, system_prompt="You set concise optimisation goals for an autonomous allocation agent.")
+        if response.used_model:
+            parsed = self._parse(response.text)
+            if parsed:
+                return parsed
+        return AllocationGoals(
+            preference_weight=0.5,
+            fairness_weight=0.3,
+            size_weight=0.2,
+            search_iterations=14,
+            reasoning="Maximise preferred-project satisfaction while keeping groups balanced in size and gender diversity.",
+            used_model=False,
+        )
+
+    def _parse(self, text: str) -> AllocationGoals | None:
+        patterns = {
+            "preference_weight": r"preference_weight\s*=\s*([0-9]*\.?[0-9]+)",
+            "fairness_weight": r"fairness_weight\s*=\s*([0-9]*\.?[0-9]+)",
+            "size_weight": r"size_weight\s*=\s*([0-9]*\.?[0-9]+)",
+            "search_iterations": r"search_iterations\s*=\s*(\d+)",
+            "reasoning": r"reasoning\s*=\s*(.+)",
+        }
+        values = {}
+        for key, pattern in patterns.items():
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if not match:
+                return None
+            values[key] = match.group(1).strip()
+
+        preference = float(values["preference_weight"])
+        fairness = float(values["fairness_weight"])
+        size = float(values["size_weight"])
+        total = preference + fairness + size
+        if total <= 0:
+            return None
+        return AllocationGoals(
+            preference_weight=preference / total,
+            fairness_weight=fairness / total,
+            size_weight=size / total,
+            search_iterations=max(8, min(30, int(values["search_iterations"]))),
+            reasoning=values["reasoning"],
+            used_model=True,
+        )
+
+
+class VerificationAgent:
+    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int):
+        self.target_group_size = max(2, target_group_size)
+        self.min_group_size = max(2, min_group_size)
+        self.max_group_size = max(self.min_group_size, max_group_size)
+
+    def score(self, result: AllocationResult, goals: AllocationGoals) -> float:
+        total_students = sum(len(group.students) for group in result.groups.values())
+        if total_students == 0:
+            return 0.0
+        preference_score = max(0.0, 100.0 - ((result.average_preference_rank - 1.0) / 3.0) * 100.0)
+        group_sizes = [len(group.students) for group in result.groups.values() if group.students]
+        violations = sum(
+            1 for size in group_sizes if size < self.min_group_size or size > self.max_group_size
+        )
+        size_gap = sum(
+            max(0, self.min_group_size - size) + max(0, size - self.max_group_size)
+            for size in group_sizes
+        )
+        size_score = max(0.0, 100.0 - (violations * 20.0) - (size_gap * 10.0))
+        return round(
+            (goals.preference_weight * preference_score)
+            + (goals.fairness_weight * result.fairness_score)
+            + (goals.size_weight * size_score),
+            2,
+        )
+
+    def summarize(self, result: AllocationResult) -> tuple[str, str]:
+        sizes = [len(group.students) for group in result.groups.values() if group.students]
+        size_min = min(sizes) if sizes else 0
+        size_max = max(sizes) if sizes else 0
+        within_range = all(self.min_group_size <= size <= self.max_group_size for size in sizes)
+        verification = (
+            f"Verified {len(sizes)} active groups with size range {size_min}-{size_max} against requested range "
+            f"{self.min_group_size}-{self.max_group_size}, fairness score {result.fairness_score}, and average preference rank {result.average_preference_rank:.2f}. "
+            f"Group-size constraint satisfied: {'Yes' if within_range else 'Partially'}"
+        )
+        diversity = "; ".join(
+            f"{group.project.project_name}: gender={group.gender_counts()}"
+            for _, group in sorted(result.groups.items())
+        )
+        return verification, diversity
+
+
+class AllocationAgent:
+    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int, llm_client: OllamaClient):
+        self.goal_agent = GoalSettingAgent(llm_client)
+        self.verification_agent = VerificationAgent(target_group_size, min_group_size, max_group_size)
+        self.deterministic_allocator = GroupAllocator(
+            target_group_size=target_group_size,
+            min_group_size=min_group_size,
+            max_group_size=max_group_size,
+        )
+
+    def run(self, students: List[Student], projects: List[Project]) -> AgenticRun:
+        goals = self.goal_agent.run(students, projects)
+        best_result = None
+        best_score = float("-inf")
+
+        for attempt in range(goals.search_iterations):
+            strategy = "agentic-search" if attempt else "deterministic-reference"
+            candidate = self.deterministic_allocator.allocate(
+                students,
+                projects,
+                seed=42 + attempt,
+                randomize=attempt > 0,
+                strategy=strategy,
+            )
+            candidate_score = self.verification_agent.score(candidate, goals)
+            if candidate_score > best_score:
+                best_result = candidate
+                best_score = candidate_score
+
+        verification_summary, diversity_summary = self.verification_agent.summarize(best_result)
+        return AgenticRun(
+            result=best_result,
+            goals=goals,
+            score=best_score,
+            verification_summary=verification_summary,
+            diversity_summary=diversity_summary,
+        )
 
 
 class ReportingAgent:
     def __init__(self, llm_client: OllamaClient):
         self.llm_client = llm_client
 
-    def create_report(self, result: AllocationResult, output_path: Path) -> None:
-        summary = build_allocation_summary(result)
+    def create_report(self, run: AgenticRun, output_path: Path) -> None:
+        summary = build_allocation_summary(run)
         prompt = (
-            "Write a concise teacher-facing report for a student group allocation task.\n"
-            "Explain how the allocation balanced project preferences, equal group sizes, and gender fairness.\n"
-            "Mention that not all offered projects had to be used.\n"
-            "Use markdown with sections: Overview, Allocation Quality, Groups, Notes.\n\n"
+            "Write a concise teacher-facing report for an agentic student group allocation workflow.\n"
+            "Explain that the agent set goals, generated candidate allocations, verified outcomes, and selected the final result.\n"
+            "Include sections: Overview, Agent Goals, Performance, Diversity, Groups, Notes.\n\n"
             f"{summary}"
         )
-        system_prompt = (
-            "You are an academic project allocation assistant. "
-            "Be precise, fair-minded, and concise."
-        )
+        system_prompt = "You are an academic project allocation assistant. Be precise, fair-minded, and concise."
         response = self.llm_client.generate(prompt, system_prompt=system_prompt)
-        report = response.text if response.used_model else fallback_teacher_report(result)
+        report = response.text if response.used_model else fallback_teacher_report(run)
         output_path.write_text(report, encoding="utf-8")
 
 
@@ -109,15 +260,12 @@ class EmailAgent:
         for project_name, group in sorted(result.groups.items()):
             prompt = (
                 "Write a short, friendly email to a student project group.\n"
-                "Include the assigned project name and its description, mention that the grouping considered "
-                "project preferences and cohort balance, and encourage the team to meet soon.\n\n"
+                "Include the assigned project name and its description, and mention that an autonomous allocation workflow considered preferences and cohort balance.\n\n"
                 f"Project: {group.project.project_name}\n"
                 f"Description: {group.project.description}\n"
-                f"Students: {', '.join(student.name for student in group.students)}\n"
-                f"Majors: {', '.join(sorted({student.major for student in group.students}))}"
+                f"Students: {', '.join(student.name for student in group.students)}"
             )
-            system_prompt = "You draft clear, warm, professional university emails."
-            response = self.llm_client.generate(prompt, system_prompt=system_prompt)
+            response = self.llm_client.generate(prompt, system_prompt="You draft clear, warm, professional university emails.")
             body = response.text if response.used_model else fallback_email_body(group)
             emails.append(
                 {
@@ -129,15 +277,19 @@ class EmailAgent:
                     "body": body,
                 }
             )
-
         output_path.write_text(json.dumps(emails, indent=2), encoding="utf-8")
 
 
 class StudentGroupingWorkflow:
-    def __init__(self, target_group_size: int, model: str, ollama_url: str):
+    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int, model: str, ollama_url: str):
         llm_client = OllamaClient(model=model, url=ollama_url)
         self.ingestion_agent = IngestionAgent()
-        self.allocation_agent = AllocationAgent(target_group_size=target_group_size)
+        self.allocation_agent = AllocationAgent(
+            target_group_size=target_group_size,
+            min_group_size=min_group_size,
+            max_group_size=max_group_size,
+            llm_client=llm_client,
+        )
         self.reporting_agent = ReportingAgent(llm_client)
         self.email_agent = EmailAgent(llm_client)
 
@@ -145,121 +297,111 @@ class StudentGroupingWorkflow:
         resolved_projects_csv = projects_csv or (input_csv.parent / "projects.csv")
         students = self.ingestion_agent.load_students(input_csv)
         projects = self.ingestion_agent.load_projects(resolved_projects_csv)
-        result = self.allocation_agent.run(students, projects)
+        run = self.allocation_agent.run(students, projects)
 
         output_dir.mkdir(parents=True, exist_ok=True)
         allocations_path = output_dir / "allocations.csv"
         report_path = output_dir / "teacher_report.md"
         emails_path = output_dir / "group_emails.json"
 
-        write_allocations(result, allocations_path)
-        self.reporting_agent.create_report(result, report_path)
-        self.email_agent.create_emails(result, emails_path)
-
-        return WorkflowOutputs(
-            allocations_path=allocations_path,
-            report_path=report_path,
-            emails_path=emails_path,
-        )
+        write_allocations(run.result, allocations_path)
+        self.reporting_agent.create_report(run, report_path)
+        self.email_agent.create_emails(run.result, emails_path)
+        return WorkflowOutputs(allocations_path=allocations_path, report_path=report_path, emails_path=emails_path)
 
 
 
 def write_allocations(result: AllocationResult, output_path: Path) -> None:
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(
-            [
-                "ProjectID",
-                "ProjectName",
-                "Description",
-                "StudentID",
-                "Name",
-                "Gender",
-                "Nationality",
-                "Major",
-                "Email",
-            ]
-        )
+        writer.writerow([
+            "ProjectID",
+            "ProjectName",
+            "Description",
+            "StudentID",
+            "Name",
+            "Gender",
+            "Nationality",
+            "Major",
+            "Email",
+        ])
         for _, group in sorted(result.groups.items()):
             for student in sorted(group.students, key=lambda item: item.name):
-                writer.writerow(
-                    [
-                        group.project.project_id,
-                        group.project.project_name,
-                        group.project.description,
-                        student.student_id,
-                        student.name,
-                        student.gender,
-                        student.nationality,
-                        student.major,
-                        student.email,
-                    ]
-                )
+                writer.writerow([
+                    group.project.project_id,
+                    group.project.project_name,
+                    group.project.description,
+                    student.student_id,
+                    student.name,
+                    student.gender,
+                    student.nationality,
+                    student.major,
+                    student.email,
+                ])
 
 
 
-def build_allocation_summary(result: AllocationResult) -> str:
-    lines = [
-        f"Fairness score: {result.fairness_score}",
-        f"Average preference rank: {result.average_preference_rank:.2f}",
+def build_allocation_summary(run: AgenticRun) -> str:
+    result = run.result
+    return "\n".join([
+        f"Goal reasoning: {run.goals.reasoning}",
+        f"Goal weights: preference={run.goals.preference_weight:.2f}, fairness={run.goals.fairness_weight:.2f}, size={run.goals.size_weight:.2f}",
+        f"Search iterations: {run.goals.search_iterations}",
+        f"Selection score: {run.score}",
+        f"Verification: {run.verification_summary}",
         f"Preference counts: {result.preference_counts}",
-    ]
-    for _, group in sorted(result.groups.items()):
-        lines.append(
-            f"Group {group.project.project_name} ({group.project.project_id}): {len(group.students)} students, "
-            f"genders={group.gender_counts()}, description={group.project.description}, "
-            f"members={[student.name for student in group.students]}"
-        )
-    return "\n".join(lines)
+        f"Diversity summary: {run.diversity_summary}",
+    ])
 
 
 
-def fallback_teacher_report(result: AllocationResult) -> str:
+def fallback_teacher_report(run: AgenticRun) -> str:
+    result = run.result
     lines = [
         "# Teacher Report",
         "",
         "## Overview",
-        (
-            f"The optimiser created {len(result.groups)} project groups from the offered project list while balancing "
-            f"student preferences, equal group sizes, and gender distribution across the cohort."
-        ),
+        "This allocation was produced by an autonomous agentic workflow. The agent set optimisation goals, generated candidate groupings, verified each candidate against those goals, and selected the final allocation without manual intervention.",
         "",
-        "## Allocation Quality",
+        "## Agent Goals",
+        f"- Goal reasoning: {run.goals.reasoning}",
+        f"- Goal weights: preference={run.goals.preference_weight:.2f}, fairness={run.goals.fairness_weight:.2f}, size={run.goals.size_weight:.2f}",
+        f"- Search iterations: {run.goals.search_iterations}",
+        f"- Goal source: {'LLM-guided' if run.goals.used_model else 'heuristic fallback'}",
+        "",
+        "## Performance",
+        f"- Final strategy: {result.strategy}",
+        f"- Selection score: {run.score}",
         f"- Fairness score: {result.fairness_score}",
         f"- Average preference rank: {result.average_preference_rank:.2f}",
         f"- First choices satisfied: {result.preference_counts['first_choice']}",
         f"- Second choices satisfied: {result.preference_counts['second_choice']}",
         f"- Third choices satisfied: {result.preference_counts['third_choice']}",
-        f"- Randomly allocated outside preferences: {result.preference_counts['outside_preferences']}",
+        f"- No preferred choice available: {result.preference_counts['outside_preferences']}",
+        f"- Verification summary: {run.verification_summary}",
+        "",
+        "## Diversity",
+        f"- Group diversity summary: {run.diversity_summary}",
         "",
         "## Groups",
     ]
-
     for _, group in sorted(result.groups.items()):
         majors = ", ".join(sorted({student.major for student in group.students}))
         nationalities = ", ".join(sorted({student.nationality for student in group.students}))
-        lines.extend(
-            [
-                f"### {group.project.project_name} ({group.project.project_id})",
-                f"- Description: {group.project.description}",
-                f"- Students: {', '.join(student.name for student in group.students)}",
-                f"- Group size: {len(group.students)}",
-                f"- Gender mix: {group.gender_counts()}",
-                f"- Majors represented: {majors}",
-                f"- Nationalities represented: {nationalities}",
-                "",
-            ]
-        )
-
-    lines.extend(
-        [
-            "## Notes",
-            (
-                "Projects were chosen from the offered project catalogue. High-demand preferred projects were used first, "
-                "and any remaining students were assigned across active groups to preserve equal sizes and similar gender diversity."
-            ),
-        ]
-    )
+        lines.extend([
+            f"### {group.project.project_name} ({group.project.project_id})",
+            f"- Description: {group.project.description}",
+            f"- Students: {', '.join(student.name for student in group.students)}",
+            f"- Group size: {len(group.students)}",
+            f"- Gender mix: {group.gender_counts()}",
+            f"- Majors represented: {majors}",
+            f"- Nationalities represented: {nationalities}",
+            "",
+        ])
+    lines.extend([
+        "## Notes",
+        "The deterministic allocator remains available in code as a reference implementation, but this demo showcases the benefits of agentic workflow automation: autonomous goal setting, unsupervised search, verification, and final decision making.",
+    ])
     return "\n".join(lines)
 
 
@@ -270,7 +412,7 @@ def fallback_email_body(group) -> str:
         f"Hello {names},\n\n"
         f"You have been assigned to the project group for '{group.project.project_name}'.\n\n"
         f"Project description: {group.project.description}\n\n"
-        "This allocation considered student project preferences while also aiming for equal-sized groups and a fair distribution across the cohort.\n\n"
+        "This allocation was produced by an autonomous workflow that considered student preferences, equal group sizes, and cohort diversity.\n\n"
         "Please introduce yourselves, arrange an initial meeting, and begin discussing how you would like to approach the project.\n\n"
         "Best regards,\nCourse Team"
     )
