@@ -1,0 +1,51 @@
+StudentID,Name,Gender,Nationality,Major,Email,PreferredProject1,PreferredProject2,PreferredProject3
+S001,Alice Chen,Female,Australia,Data Science,alice.chen@example.edu,AI Tutor,Study Group Matcher,Course Planner Assistant
+S002,Ben Singh,Male,India,Software Engineering,ben.singh@example.edu,Campus App,Smart Parking System,Event Recommendation Engine
+S003,Chloe Tran,Female,Vietnam,Information Systems,chloe.tran@example.edu,Sustainability Dashboard,Energy Optimization System,Food Waste Tracker
+S004,Daniel Kim,Male,South Korea,Computer Science,daniel.kim@example.edu,AI Resume Coach,AI Tutor,Course Planner Assistant
+S005,Emma Brown,Female,Australia,Cyber Security,emma.brown@example.edu,Mental Health Chatbot,Peer Mentorship Network,AI Tutor
+S006,Faisal Rahman,Male,Bangladesh,Data Science,faisal.rahman@example.edu,Sustainability Dashboard,Food Waste Tracker,Energy Optimization System
+S007,Grace Lee,Female,Malaysia,Software Engineering,grace.lee@example.edu,Campus App,Study Group Matcher,Event Recommendation Engine
+S008,Henry Wang,Male,China,Computer Science,henry.wang@example.edu,Smart Parking System,Campus App,Library Seat Finder
+S009,Isabella Rossi,Female,Italy,Information Systems,isabella.rossi@example.edu,Research Collaboration Platform,Course Planner Assistant,AI Tutor
+S010,Jack Nguyen,Male,Vietnam,Data Science,jack.nguyen@example.edu,Event Recommendation Engine,Campus App,Study Group Matcher
+S011,Kate Johnson,Female,Australia,Software Engineering,kate.johnson@example.edu,Study Group Matcher,Course Planner Assistant,AI Tutor
+S012,Liam Patel,Male,India,Computer Science,liam.patel@example.edu,AI Tutor,AI Resume Coach,Campus App
+S013,Maya Lopez,Female,Spain,Information Systems,maya.lopez@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S014,Noah Smith,Male,Australia,Data Science,noah.smith@example.edu,Smart Parking System,Campus App,Energy Optimization System
+S015,Olivia Martin,Female,France,Cyber Security,olivia.martin@example.edu,Mental Health Chatbot,AI Tutor,Peer Mentorship Network
+S016,Peter Tan,Male,Singapore,Software Engineering,peter.tan@example.edu,Campus App,Library Seat Finder,Smart Parking System
+S017,Qi Zhang,Female,China,Computer Science,qi.zhang@example.edu,AI Tutor,AI Resume Coach,Course Planner Assistant
+S018,Rahul Verma,Male,India,Data Science,rahul.verma@example.edu,Energy Optimization System,Sustainability Dashboard,Food Waste Tracker
+S019,Sophia Adams,Female,Australia,Information Systems,sophia.adams@example.edu,Peer Mentorship Network,Research Collaboration Platform,AI Tutor
+S020,Tom Baker,Male,UK,Software Engineering,tom.baker@example.edu,Study Group Matcher,Campus App,Event Recommendation Engine
+S021,Uma Iyer,Female,India,Computer Science,uma.iyer@example.edu,AI Tutor,Course Planner Assistant,AI Resume Coach
+S022,Vincent Dubois,Male,France,Data Science,vincent.dubois@example.edu,Energy Optimization System,Sustainability Dashboard,Smart Parking System
+S023,Wendy Lim,Female,Malaysia,Software Engineering,wendy.lim@example.edu,Campus App,Study Group Matcher,Library Seat Finder
+S024,Xavier Costa,Male,Brazil,Information Systems,xavier.costa@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S025,Yara Haddad,Female,Lebanon,Cyber Security,yara.haddad@example.edu,Mental Health Chatbot,AI Tutor,Peer Mentorship Network
+S026,Zachary Hill,Male,Australia,Computer Science,zachary.hill@example.edu,Smart Parking System,Campus App,Library Seat Finder
+S027,Amina Yusuf,Female,Nigeria,Data Science,amina.yusuf@example.edu,Sustainability Dashboard,Food Waste Tracker,Energy Optimization System
+S028,Boris Petrov,Male,Russia,Software Engineering,boris.petrov@example.edu,Campus App,Event Recommendation Engine,Study Group Matcher
+S029,Camila Santos,Female,Brazil,Information Systems,camila.santos@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S030,Diego Alvarez,Male,Spain,Computer Science,diego.alvarez@example.edu,AI Resume Coach,AI Tutor,Course Planner Assistant
+S031,Elena Popescu,Female,Romania,Data Science,elena.popescu@example.edu,Energy Optimization System,Sustainability Dashboard,Food Waste Tracker
+S032,Farid Khan,Male,Pakistan,Software Engineering,farid.khan@example.edu,Campus App,Smart Parking System,Study Group Matcher
+S033,Gabriela Costa,Female,Brazil,Information Systems,gabriela.costa@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S034,Hassan Ali,Male,UAE,Computer Science,hassan.ali@example.edu,AI Tutor,AI Resume Coach,Course Planner Assistant
+S035,Ingrid Larsen,Female,Norway,Data Science,ingrid.larsen@example.edu,Sustainability Dashboard,Energy Optimization System,Food Waste Tracker
+S036,Jason Miller,Male,USA,Software Engineering,jason.miller@example.edu,Campus App,Event Recommendation Engine,Study Group Matcher
+S037,Karen Wong,Female,Singapore,Information Systems,karen.wong@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S038,Luka Novak,Male,Croatia,Computer Science,luka.novak@example.edu,AI Tutor,Course Planner Assistant,AI Resume Coach
+S039,Maria Garcia,Female,Spain,Data Science,maria.garcia@example.edu,Sustainability Dashboard,Energy Optimization System,Food Waste Tracker
+S040,Nathan Brooks,Male,Australia,Software Engineering,nathan.brooks@example.edu,Campus App,Library Seat Finder,Smart Parking System
+S041,Olga Ivanova,Female,Russia,Information Systems,olga.ivanova@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S042,Pedro Silva,Male,Portugal,Computer Science,pedro.silva@example.edu,AI Resume Coach,AI Tutor,Course Planner Assistant
+S043,Queenie Lau,Female,Hong Kong,Data Science,queenie.lau@example.edu,Sustainability Dashboard,Food Waste Tracker,Energy Optimization System
+S044,Rajesh Gupta,Male,India,Software Engineering,rajesh.gupta@example.edu,Campus App,Study Group Matcher,Event Recommendation Engine
+S045,Sara Svensson,Female,Sweden,Information Systems,sara.svensson@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S046,Tariq Mahmood,Male,Pakistan,Computer Science,tariq.mahmood@example.edu,AI Tutor,AI Resume Coach,Course Planner Assistant
+S047,Ursula Meier,Female,Germany,Data Science,ursula.meier@example.edu,Sustainability Dashboard,Energy Optimization System,Food Waste Tracker
+S048,Vinod Nair,Male,India,Software Engineering,vinod.nair@example.edu,Campus App,Smart Parking System,Study Group Matcher
+S049,Wafa Haddad,Female,Morocco,Information Systems,wafa.haddad@example.edu,Research Collaboration Platform,Peer Mentorship Network,AI Tutor
+S050,Xiao Li,Male,China,Computer Science,xiao.li@example.edu,AI Resume Coach,AI Tutor,Course Planner Assistant

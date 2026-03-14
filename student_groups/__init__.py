@@ -1,0 +1,1 @@
+"""Student grouping optimiser demo."""
