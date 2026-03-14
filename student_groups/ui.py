@@ -186,16 +186,24 @@ class DemoApp(tk.Tk):
         ttk.Label(group_header, text="Double-click a group to inspect students, move a student, and send email.", style="Body.TLabel").pack(side="left")
         ttk.Button(group_header, text="Open Group Details", command=self._open_selected_group).pack(side="right")
 
+        group_table = ttk.Frame(groups_tab)
+        group_table.pack(fill="both", expand=True)
+        group_table.columnconfigure(0, weight=1)
+        group_table.rowconfigure(0, weight=1)
+
         self.group_tree = ttk.Treeview(
-            groups_tab,
+            group_table,
             columns=("size", "range", "gender", "project"),
             show="headings",
             height=18,
         )
-        for column, width in [("size", 70), ("range", 90), ("gender", 180), ("project", 420)]:
-            self.group_tree.heading(column, text=column.title())
-            self.group_tree.column(column, width=width, anchor="w")
-        self.group_tree.pack(fill="both", expand=True)
+        for column, label, width, stretch in [("size", "Size", 60, False), ("range", "Range", 80, False), ("gender", "Gender", 120, False), ("project", "Project Name", 240, True)]:
+            self.group_tree.heading(column, text=label)
+            self.group_tree.column(column, width=width, minwidth=width, anchor="w", stretch=stretch)
+        self.group_tree.grid(row=0, column=0, sticky="nsew")
+        group_xscroll = ttk.Scrollbar(group_table, orient="horizontal", command=self.group_tree.xview)
+        group_xscroll.grid(row=1, column=0, sticky="ew")
+        self.group_tree.configure(xscrollcommand=group_xscroll.set)
         self.group_tree.bind("<Double-1>", self._open_group_from_event)
 
         report_scroll = ttk.Scrollbar(report_tab)
