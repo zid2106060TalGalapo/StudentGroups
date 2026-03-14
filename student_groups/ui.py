@@ -88,7 +88,7 @@ class DemoApp(tk.Tk):
         right = ttk.Frame(container, style="Card.TFrame", padding=18)
         right.grid(row=1, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(2, weight=1)
+        right.rowconfigure(3, weight=1)
 
         self._build_form(left)
         self._build_results(right)
