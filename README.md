@@ -35,21 +35,23 @@ ollama pull llama3.1:8b
 2. Run the demo:
 
 ```bash
-python app.py --input data/students.csv --projects data/projects.json --output-dir output --min-group-size 3 --max-group-size 5
+python app.py --input data/students.csv --projects data/projects.json --output-dir output --teacher-prompt "Try to maximise student preferences but still maintain fairness."
 ```
+
+The teacher prompt is converted into dynamic optimisation weights. If no prompt is supplied, the default prompt above is used.
 
 ## Agentic flow
 
 1. `IngestionAgent` loads students.
 2. `ProjectContextMCPTool` loads `projects.json` and exposes project metadata as external context.
-3. `GoalSettingAgent` decides optimisation priorities.
+3. `GoalSettingAgent` converts the teacher prompt into optimisation priorities.
 4. `AllocationAgent` generates candidate allocations while prioritising groups that stay inside each selected project's MCP min-max team-size range.
 5. `VerificationAgent` queries the MCP tool to check whether each final group fits the project's difficulty and recommended team size.
-6. `ReportingAgent` explains the final allocation and the reasoning for each group.
+6. `ReportingAgent` explains the final allocation, the teacher demand, and the reasoning for each group.
 7. `EmailAgent` drafts one email per group.
 
 ## Notes
 
 - The MCP-style tool keeps the demo concise while still showing external tool access during reasoning.
 - Not all offered projects need to be used.
-- The teacher report includes per-group reasoning based on project difficulty and recommended team size.
+- The teacher report includes the demand prompt, derived weights, and an achievement summary.

@@ -13,6 +13,9 @@ from student_groups.models import PREFERENCE_COLUMNS, REQUIRED_COLUMNS, Project,
 from student_groups.project_context_mcp import ProjectAssessment, ProjectContextMCPTool
 
 
+DEFAULT_TEACHER_PROMPT = "Try to maximise student preferences but still maintain fairness."
+
+
 @dataclass
 class WorkflowOutputs:
     allocations_path: Path
@@ -22,6 +25,7 @@ class WorkflowOutputs:
 
 @dataclass
 class AllocationGoals:
+    teacher_prompt: str
     preference_weight: float
     fairness_weight: float
     size_weight: float
@@ -38,6 +42,7 @@ class AgenticRun:
     verification_summary: str
     diversity_summary: str
     group_assessments: Dict[str, ProjectAssessment]
+    achievement_summary: str
 
 
 class IngestionAgent:
@@ -70,31 +75,48 @@ class IngestionAgent:
 
 
 class GoalSettingAgent:
-    def __init__(self, llm_client: OllamaClient):
+    def __init__(self, llm_client: OllamaClient, teacher_prompt: str):
         self.llm_client = llm_client
+        self.teacher_prompt = teacher_prompt or DEFAULT_TEACHER_PROMPT
 
     def run(self, students: List[Student], projects: List[Project]) -> AllocationGoals:
         prompt = (
-            "Set goals for an autonomous student grouping agent that can use an MCP tool for project context.\n"
+            "Convert a teacher instruction into optimisation weights for an autonomous student grouping agent that can use an MCP tool for project context.\n"
             "Return exactly these lines:\n"
             "preference_weight=<number>\n"
             "fairness_weight=<number>\n"
             "size_weight=<number>\n"
             "search_iterations=<integer between 8 and 30>\n"
             "reasoning=<one short sentence>\n\n"
+            f"Teacher instruction: {self.teacher_prompt}\n"
             f"Students={len(students)}, Projects={len(projects)}"
         )
-        response = self.llm_client.generate(prompt, system_prompt="You set concise optimisation goals for an autonomous allocation agent.")
+        response = self.llm_client.generate(prompt, system_prompt="You convert teacher intent into concise optimisation goals.")
         if response.used_model:
             parsed = self._parse(response.text)
             if parsed:
                 return parsed
+        return self._fallback_goals()
+
+    def _fallback_goals(self) -> AllocationGoals:
+        text = self.teacher_prompt.lower()
+        preference = 0.34
+        fairness = 0.33
+        size = 0.33
+        if any(word in text for word in ["prefer", "preference", "choice"]):
+            preference += 0.22
+        if any(word in text for word in ["fair", "equitable", "balance", "diversity"]):
+            fairness += 0.18
+        if any(word in text for word in ["size", "team", "difficulty", "min", "max", "large enough"]):
+            size += 0.18
+        total = preference + fairness + size
         return AllocationGoals(
-            preference_weight=0.35,
-            fairness_weight=0.20,
-            size_weight=0.45,
+            teacher_prompt=self.teacher_prompt,
+            preference_weight=preference / total,
+            fairness_weight=fairness / total,
+            size_weight=size / total,
             search_iterations=14,
-            reasoning="Maximise preferred-project satisfaction while prioritising team sizes that stay within each project's MCP min-max range.",
+            reasoning="Derived weights from the teacher prompt and prioritised the strongest requested outcomes.",
             used_model=False,
         )
 
@@ -120,6 +142,7 @@ class GoalSettingAgent:
         if total <= 0:
             return None
         return AllocationGoals(
+            teacher_prompt=self.teacher_prompt,
             preference_weight=preference / total,
             fairness_weight=fairness / total,
             size_weight=size / total,
@@ -156,7 +179,7 @@ class VerificationAgent:
             2,
         )
 
-    def summarize(self, result: AllocationResult) -> tuple[str, str, Dict[str, ProjectAssessment]]:
+    def summarize(self, result: AllocationResult) -> tuple[str, str, Dict[str, ProjectAssessment], str]:
         sizes = [len(group.students) for group in result.groups.values() if group.students]
         size_min = min(sizes) if sizes else 0
         size_max = max(sizes) if sizes else 0
@@ -173,12 +196,17 @@ class VerificationAgent:
             f"{group.project.project_name}: gender={group.gender_counts()}"
             for _, group in sorted(result.groups.items())
         )
-        return verification, diversity, assessments
+        achievement = (
+            f"Achieved {result.preference_counts['first_choice']} first-choice, {result.preference_counts['second_choice']} second-choice, "
+            f"{result.preference_counts['third_choice']} third-choice, and {result.preference_counts['outside_preferences']} outside-preference allocations, "
+            f"with fairness score {result.fairness_score} and {project_fit_count}/{len(assessments)} MCP project-fit matches."
+        )
+        return verification, diversity, assessments, achievement
 
 
 class AllocationAgent:
-    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int, llm_client: OllamaClient, mcp_tool: ProjectContextMCPTool):
-        self.goal_agent = GoalSettingAgent(llm_client)
+    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int, teacher_prompt: str, llm_client: OllamaClient, mcp_tool: ProjectContextMCPTool):
+        self.goal_agent = GoalSettingAgent(llm_client, teacher_prompt)
         self.verification_agent = VerificationAgent(target_group_size, min_group_size, max_group_size, mcp_tool)
         self.deterministic_allocator = GroupAllocator(
             target_group_size=target_group_size,
@@ -205,7 +233,7 @@ class AllocationAgent:
                 best_result = candidate
                 best_score = candidate_score
 
-        verification_summary, diversity_summary, group_assessments = self.verification_agent.summarize(best_result)
+        verification_summary, diversity_summary, group_assessments, achievement_summary = self.verification_agent.summarize(best_result)
         return AgenticRun(
             result=best_result,
             goals=goals,
@@ -213,6 +241,7 @@ class AllocationAgent:
             verification_summary=verification_summary,
             diversity_summary=diversity_summary,
             group_assessments=group_assessments,
+            achievement_summary=achievement_summary,
         )
 
 
@@ -224,8 +253,8 @@ class ReportingAgent:
         summary = build_allocation_summary(run)
         prompt = (
             "Write a concise teacher-facing report for an agentic student group allocation workflow.\n"
-            "Explain that the agent used an MCP tool to access project metadata, set goals, generated candidate allocations, verified outcomes, and selected the final result.\n"
-            "Include sections: Overview, Agent Goals, MCP Reasoning, Performance, Diversity, Groups, Notes.\n\n"
+            "Explain that the agent used an MCP tool to access project metadata, converted the teacher prompt into weights, set goals, generated candidate allocations, verified outcomes, and selected the final result.\n"
+            "Include sections: Overview, Teacher Demand, Agent Goals, MCP Reasoning, Performance, Goal Achievement, Diversity, Groups, Notes.\n\n"
             f"{summary}"
         )
         system_prompt = "You are an academic project allocation assistant. Be precise, fair-minded, and concise."
@@ -264,7 +293,7 @@ class EmailAgent:
 
 
 class StudentGroupingWorkflow:
-    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int, model: str, ollama_url: str, projects_path: Optional[Path] = None):
+    def __init__(self, target_group_size: int, min_group_size: int, max_group_size: int, teacher_prompt: str, model: str, ollama_url: str, projects_path: Optional[Path] = None):
         llm_client = OllamaClient(model=model, url=ollama_url)
         self.ingestion_agent = IngestionAgent()
         self.projects_path = projects_path
@@ -272,6 +301,7 @@ class StudentGroupingWorkflow:
         self.target_group_size = target_group_size
         self.min_group_size = min_group_size
         self.max_group_size = max_group_size
+        self.teacher_prompt = teacher_prompt or DEFAULT_TEACHER_PROMPT
 
     def run(self, input_csv: Path, output_dir: Path, projects_csv: Optional[Path] = None) -> WorkflowOutputs:
         resolved_projects_path = projects_csv or self.projects_path or (input_csv.parent / "projects.json")
@@ -282,6 +312,7 @@ class StudentGroupingWorkflow:
             target_group_size=self.target_group_size,
             min_group_size=self.min_group_size,
             max_group_size=self.max_group_size,
+            teacher_prompt=self.teacher_prompt,
             llm_client=self.llm_client,
             mcp_tool=mcp_tool,
         )
@@ -298,6 +329,7 @@ class StudentGroupingWorkflow:
         reporting_agent.create_report(run, report_path)
         email_agent.create_emails(run.result, emails_path)
         return WorkflowOutputs(allocations_path=allocations_path, report_path=report_path, emails_path=emails_path)
+
 
 
 def write_allocations(result: AllocationResult, output_path: Path) -> None:
@@ -335,14 +367,17 @@ def write_allocations(result: AllocationResult, output_path: Path) -> None:
                 ])
 
 
+
 def build_allocation_summary(run: AgenticRun) -> str:
     result = run.result
     lines = [
+        f"Teacher demand: {run.goals.teacher_prompt}",
         f"Goal reasoning: {run.goals.reasoning}",
         f"Goal weights: preference={run.goals.preference_weight:.2f}, fairness={run.goals.fairness_weight:.2f}, size={run.goals.size_weight:.2f}",
         f"Search iterations: {run.goals.search_iterations}",
         f"Selection score: {run.score}",
         f"Verification: {run.verification_summary}",
+        f"Goal achievement: {run.achievement_summary}",
         f"Preference counts: {result.preference_counts}",
         f"Diversity summary: {run.diversity_summary}",
     ]
@@ -351,13 +386,17 @@ def build_allocation_summary(run: AgenticRun) -> str:
     return "\n".join(lines)
 
 
+
 def fallback_teacher_report(run: AgenticRun) -> str:
     result = run.result
     lines = [
         "# Teacher Report",
         "",
         "## Overview",
-        "This allocation was produced by an autonomous agentic workflow. The agent used an MCP tool to access project metadata, then set optimisation goals, generated candidate groupings, verified each candidate against those goals, and selected the final allocation without manual intervention.",
+        "This allocation was produced by an autonomous agentic workflow. The agent used an MCP tool to access project metadata, translated the teacher's instruction into optimisation weights, generated candidate groupings, verified each candidate against those goals, and selected the final allocation.",
+        "",
+        "## Teacher Demand",
+        f"- Teacher prompt: {run.goals.teacher_prompt}",
         "",
         "## Agent Goals",
         f"- Goal reasoning: {run.goals.reasoning}",
@@ -377,6 +416,9 @@ def fallback_teacher_report(run: AgenticRun) -> str:
         f"- Second choices satisfied: {result.preference_counts['second_choice']}",
         f"- Third choices satisfied: {result.preference_counts['third_choice']}",
         f"- No preferred choice available: {result.preference_counts['outside_preferences']}",
+        "",
+        "## Goal Achievement",
+        f"- Achievement summary: {run.achievement_summary}",
         "",
         "## Diversity",
         f"- Group diversity summary: {run.diversity_summary}",
@@ -402,9 +444,10 @@ def fallback_teacher_report(run: AgenticRun) -> str:
         ])
     lines.extend([
         "## Notes",
-        "This demo showcases MCP-style tool use inside an agentic workflow: the agent queries external project context during reasoning, sets a goal to keep groups inside each project's recommended size range where feasible, and reports its decision logic back to the teacher.",
+        "This demo showcases MCP-style tool use inside an agentic workflow: the agent queries external project context during reasoning, converts teacher demand into dynamic weights, and reports how well the final allocation achieved those goals.",
     ])
     return "\n".join(lines)
+
 
 
 def fallback_email_body(group) -> str:
