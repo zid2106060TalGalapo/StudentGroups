@@ -231,10 +231,10 @@ class GroupAllocator:
                 preference_rank_total += 4
                 preference_counts["outside_preferences"] += 1
 
-        fairness_score = 100.0 - min(
-            100.0,
-            sum(self._group_gender_gap(group, cohort_gender_ratio) for group in groups.values()) * 100.0,
-        )
+        group_fairness_scores = [
+            self._group_fairness_score(group, cohort_gender_ratio) for group in groups.values() if group.students
+        ]
+        fairness_score = 100.0 * sum(group_fairness_scores) / max(1, len(group_fairness_scores))
         average_rank = preference_rank_total / max(1, len(students))
         return AllocationResult(
             groups=groups,
@@ -243,9 +243,11 @@ class GroupAllocator:
             fairness_score=round(fairness_score, 2),
         )
 
-    def _group_gender_gap(self, group: Group, cohort_gender_ratio: Dict[str, float]) -> float:
-        if not group.students:
-            return 0.0
+    def _group_fairness_score(self, group: Group, cohort_gender_ratio: Dict[str, float]) -> float:
         counts = group.gender_counts()
         size = len(group.students)
-        return sum(abs((counts.get(gender, 0) / size) - ratio) for gender, ratio in cohort_gender_ratio.items())
+        if size == 0:
+            return 1.0
+
+        distance = sum(abs((counts.get(gender, 0) / size) - ratio) for gender, ratio in cohort_gender_ratio.items())
+        return max(0.0, 1.0 - (distance / 2.0))
