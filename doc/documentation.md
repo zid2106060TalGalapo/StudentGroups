@@ -78,7 +78,7 @@ flowchart TD
 2. Run the app:
 
 ```bash
-python app.py --input sample_data/students.csv --projects sample_data/projects.csv --output-dir output --min-group-size 3 --max-group-size 5
+python app.py --input sample_data/students.csv --projects sample_data/projects.csv --output-dir output --min-group-size 3 --max-group-size 8
 ```
 
 ---

@@ -16,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default="output", help="Directory for generated outputs")
     parser.add_argument("--group-size", type=int, default=4, help="Approximate target group size")
     parser.add_argument("--min-group-size", type=int, default=3, help="Minimum allowed group size")
-    parser.add_argument("--max-group-size", type=int, default=5, help="Maximum allowed group size")
+    parser.add_argument("--max-group-size", type=int, default=8, help="Maximum allowed group size")
     parser.add_argument(
         "--teacher-prompt",
         default=DEFAULT_TEACHER_PROMPT,
@@ -49,14 +49,9 @@ def main() -> int:
         model=args.model,
         ollama_url=args.ollama_url,
     )
-    outputs = workflow.run(
+    workflow.run(
         input_csv=Path(args.input),
         projects_csv=Path(args.projects) if args.projects else None,
         output_dir=Path(args.output_dir),
     )
-
-    print("Student grouping workflow completed.")
-    print(f"Allocations: {outputs.allocations_path}")
-    print(f"Teacher report: {outputs.report_path}")
-    print(f"Group emails: {outputs.emails_path}")
     return 0

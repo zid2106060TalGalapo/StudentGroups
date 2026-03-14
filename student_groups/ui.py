@@ -23,7 +23,7 @@ def launch_demo_app() -> int:
 class DemoApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Agentic AI Student Grouping Demo")
+        self.title("Agentic AI Student Grouping")
         self.geometry("1160x760")
         self.minsize(980, 680)
         self.configure(bg="#eef2f7")
@@ -47,13 +47,14 @@ class DemoApp(tk.Tk):
         self.output_dir = tk.StringVar(value="output")
         self.group_size = tk.IntVar(value=4)
         self.min_group_size = tk.IntVar(value=3)
-        self.max_group_size = tk.IntVar(value=5)
+        self.max_group_size = tk.IntVar(value=8)
         self.teacher_prompt = tk.StringVar(value=DEFAULT_TEACHER_PROMPT)
         self.model = tk.StringVar(value="llama3.1:8b")
         self.ollama_url = tk.StringVar(value="http://localhost:11434/api/generate")
         self.status_text = tk.StringVar(value="Ready to run the agentic allocation demo.")
         self.student_count_text = tk.StringVar()
         self.group_details: Dict[str, Dict[str, object]] = {}
+        self.email_drafts: List[dict] = []
         self.current_outputs: WorkflowOutputs | None = None
         self.project_catalog = _load_projects_json(Path(self.project_path.get()))
         self.student_catalog = _load_students_csv(Path(self.student_path.get()))
@@ -73,7 +74,7 @@ class DemoApp(tk.Tk):
 
         header = ttk.Frame(container, style="App.TFrame")
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 16))
-        ttk.Label(header, text="Agentic AI Student Grouping Demo", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(header, text="Agentic AI Student Grouping", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             header,
             text="Interactive teacher controls on the left, allocation outcomes and group summaries on the right.",
@@ -141,9 +142,8 @@ class DemoApp(tk.Tk):
         ttk.Entry(parent, textvariable=self.ollama_url).grid(row=row, column=1, columnspan=2, sticky="ew", padx=8)
         row += 1
 
-        ttk.Button(parent, text="Run Agentic Allocation", style="Run.TButton", command=self._run_demo).grid(
-            row=row, column=0, columnspan=3, sticky="ew", pady=(18, 8)
-        )
+        ttk.Button(parent, text="Run Agentic Allocation", style="Run.TButton", command=self._run_demo).grid(row=row, column=0, columnspan=2, sticky="ew", pady=(18, 8))
+        ttk.Button(parent, text="Load Existing Allocation", command=self._load_existing_allocation).grid(row=row, column=2, sticky="ew", pady=(18, 8))
         row += 1
         ttk.Label(parent, textvariable=self.status_text, style="Body.TLabel", wraplength=320, justify="left").grid(
             row=row, column=0, columnspan=3, sticky="w", pady=(4, 0)
@@ -155,15 +155,17 @@ class DemoApp(tk.Tk):
 
         metrics = ttk.Frame(parent, style="Card.TFrame")
         metrics.grid(row=2, column=0, sticky="ew")
-        for index in range(5):
+        for index in range(7):
             metrics.columnconfigure(index, weight=1)
         self.metric_labels: Dict[str, ttk.Label] = {}
         metric_titles = [
             ("students", "Students"),
+            ("groups", "Groups"),
             ("fairness", "Fairness"),
             ("first_choice", "First Choice"),
-            ("outside", "Outside Top 3"),
-            ("fit", "Project Fit"),
+            ("second_choice", "Second Choice"),
+            ("third_choice", "Third Choice"),
+            ("outside", "No Choice"),
         ]
         for index, (key, title) in enumerate(metric_titles):
             card = ttk.Frame(metrics, style="Card.TFrame", padding=(8, 6))
@@ -178,13 +180,17 @@ class DemoApp(tk.Tk):
 
         groups_tab = ttk.Frame(notebook)
         report_tab = ttk.Frame(notebook)
+        email_tab = ttk.Frame(notebook)
         notebook.add(groups_tab, text="Groups")
+        notebook.add(email_tab, text="Email Drafts")
         notebook.add(report_tab, text="Teacher Report")
 
         group_header = ttk.Frame(groups_tab)
         group_header.pack(fill="x", pady=(0, 8))
-        ttk.Label(group_header, text="Double-click a group to inspect students, move a student, and send email.", style="Body.TLabel").pack(side="left")
-        ttk.Button(group_header, text="Open Group Details", command=self._open_selected_group).pack(side="right")
+        ttk.Button(group_header, text="Open Group Details", command=self._open_selected_group).pack(side="left")
+        ttk.Button(group_header, text="Save Allocation CSV", command=self._save_current_outputs).pack(side="left", padx=(8, 0))
+
+        ttk.Label(groups_tab, text="Double-click a group to inspect students, move a student, and send email.", style="Body.TLabel").pack(anchor="w", pady=(0, 8))
 
         group_table = ttk.Frame(groups_tab)
         group_table.pack(fill="both", expand=True)
@@ -205,6 +211,17 @@ class DemoApp(tk.Tk):
         group_xscroll.grid(row=1, column=0, sticky="ew")
         self.group_tree.configure(xscrollcommand=group_xscroll.set)
         self.group_tree.bind("<Double-1>", self._open_group_from_event)
+
+        email_header = ttk.Frame(email_tab)
+        email_header.pack(fill="x", pady=(0, 8))
+        ttk.Label(email_header, text="EmailAgent output for the current allocation.", style="Body.TLabel").pack(side="left")
+        ttk.Button(email_header, text="Send Emails to Groups", command=self._send_group_emails).pack(side="right")
+
+        email_scroll = ttk.Scrollbar(email_tab)
+        email_scroll.pack(side="right", fill="y")
+        self.email_text = tk.Text(email_tab, wrap="word", font=("Consolas", 10), yscrollcommand=email_scroll.set)
+        self.email_text.pack(fill="both", expand=True)
+        email_scroll.config(command=self.email_text.yview)
 
         report_scroll = ttk.Scrollbar(report_tab)
         report_scroll.pack(side="right", fill="y")
@@ -244,6 +261,78 @@ class DemoApp(tk.Tk):
         if path:
             self.output_dir.set(path)
 
+    def _load_existing_allocation(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Select allocation CSV",
+            initialdir=self.output_dir.get(),
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        allocations_path = Path(selected)
+        output_root = allocations_path.parent
+        outputs = WorkflowOutputs(
+            allocations_path=allocations_path,
+            report_path=output_root / "teacher_report.md",
+            emails_path=output_root / "group_emails.json",
+        )
+        if not outputs.report_path.exists() or not outputs.emails_path.exists():
+            messagebox.showinfo(
+                "Load allocation",
+                "The selected allocation CSV was found, but matching teacher_report.md or group_emails.json was not found in the same folder.",
+            )
+            return
+        self.output_dir.set(str(output_root))
+        self.current_outputs = outputs
+        self._load_results(outputs)
+        self.status_text.set(f"Loaded allocation outputs from {output_root}.")
+
+    def _save_current_outputs(self) -> None:
+        if not self.group_details:
+            messagebox.showinfo("Save allocation", "Run or load an allocation first.")
+            return
+        selected = filedialog.askdirectory(
+            title="Select folder for allocation outputs",
+            initialdir=self.output_dir.get(),
+        )
+        if not selected:
+            return
+        output_root = Path(selected)
+        output_root.mkdir(parents=True, exist_ok=True)
+        outputs = WorkflowOutputs(
+            allocations_path=output_root / "allocations.csv",
+            report_path=output_root / "teacher_report.md",
+            emails_path=output_root / "group_emails.json",
+        )
+        _write_allocations_csv(outputs.allocations_path, self.group_details)
+        _write_group_emails_json(outputs.emails_path, self.group_details)
+        runtime_students = _write_runtime_students_csv(self.student_catalog)
+        _write_teacher_report(
+            outputs.report_path,
+            self.group_details,
+            runtime_students,
+            self.teacher_prompt.get(),
+            self.min_group_size.get(),
+            self.max_group_size.get(),
+        )
+        self.output_dir.set(str(output_root))
+        self.current_outputs = outputs
+        self._load_results(outputs)
+        self.status_text.set(
+            f"Saved allocations.csv, teacher_report.md, and group_emails.json to {output_root}."
+        )
+
+    def _send_group_emails(self) -> None:
+        if not self.email_drafts:
+            messagebox.showinfo("Send emails", "Load or run an allocation first.")
+            return
+        total_recipients = sum(len(draft.get("to", [])) for draft in self.email_drafts)
+        messagebox.showinfo(
+            "Mock email send",
+            f"Demo mode only: prepared {len(self.email_drafts)} group emails for {total_recipients} recipients.",
+        )
+        self.status_text.set("Mock email send completed for the current group drafts.")
+
     def _run_demo(self) -> None:
         self.teacher_prompt.set(self.prompt_widget.get("1.0", "end").strip() or DEFAULT_TEACHER_PROMPT)
         if self.min_group_size.get() > self.max_group_size.get():
@@ -273,7 +362,13 @@ class DemoApp(tk.Tk):
             self.status_text.set("Allocation complete. Review the teacher summary and groups on the right.")
         except Exception as exc:
             self.status_text.set("Allocation failed. Please review the settings and try again.")
-            messagebox.showerror("Agentic Allocation Demo", str(exc))
+            message = str(exc)
+            if "No feasible allocation exists" in message:
+                message = (
+                    f"No feasible allocation: requested group size {self.min_group_size.get()}-{self.max_group_size.get()} "
+                    "conflicts with the project team-size limits in the current project catalog."
+                )
+            messagebox.showerror("Agentic Allocation Demo", message)
 
     def _load_results(self, outputs: WorkflowOutputs) -> None:
         rows, details = _parse_allocation_rows(outputs.allocations_path, outputs.emails_path)
@@ -282,20 +377,27 @@ class DemoApp(tk.Tk):
 
         fairness_match = re.search(r"Fairness score: ([0-9.]+)", report)
         first_choice_match = re.search(r"First choices satisfied: (\d+)", report)
+        second_choice_match = re.search(r"Second choices satisfied: (\d+)", report)
+        third_choice_match = re.search(r"Third choices satisfied: (\d+)", report)
         outside_match = re.search(r"No preferred choice available: (\d+)", report)
-        fit_match = re.search(r"(\d+) of (\d+) project-specific fits", report)
 
         self.metric_labels["students"].config(text=str(len(self.student_catalog)))
-        self.metric_labels["fairness"].config(text=fairness_match.group(1) if fairness_match else "-")
+        self.metric_labels["groups"].config(text=str(len(rows)))
+        fairness_value = str(int(round(float(fairness_match.group(1))))) if fairness_match else "-"
+        self.metric_labels["fairness"].config(text=fairness_value)
         self.metric_labels["first_choice"].config(text=first_choice_match.group(1) if first_choice_match else "-")
+        self.metric_labels["second_choice"].config(text=second_choice_match.group(1) if second_choice_match else "-")
+        self.metric_labels["third_choice"].config(text=third_choice_match.group(1) if third_choice_match else "-")
         self.metric_labels["outside"].config(text=outside_match.group(1) if outside_match else "-")
-        self.metric_labels["fit"].config(text=f"{fit_match.group(1)}/{fit_match.group(2)}" if fit_match else "-")
 
         for item in self.group_tree.get_children():
             self.group_tree.delete(item)
         for row in rows:
             self.group_tree.insert("", "end", iid=row["project"], values=(row["size"], row["range"], row["gender"], row["project"]))
 
+        self.email_drafts = json.loads(outputs.emails_path.read_text(encoding="utf-8"))
+        self.email_text.delete("1.0", "end")
+        self.email_text.insert("1.0", json.dumps(self.email_drafts, indent=2))
         self.report_text.delete("1.0", "end")
         self.report_text.insert("1.0", report)
 
@@ -313,10 +415,11 @@ class DemoApp(tk.Tk):
             raise ValueError("Output files are not available yet.")
         _write_allocations_csv(self.current_outputs.allocations_path, self.group_details)
         _write_group_emails_json(self.current_outputs.emails_path, self.group_details)
+        runtime_students = _write_runtime_students_csv(self.student_catalog)
         _write_teacher_report(
             self.current_outputs.report_path,
             self.group_details,
-            Path(self.student_path.get()),
+            runtime_students,
             self.teacher_prompt.get(),
             self.min_group_size.get(),
             self.max_group_size.get(),
@@ -423,21 +526,14 @@ class GroupDetailsDialog(tk.Toplevel):
 
     def _email_group(self) -> None:
         recipients = self.details.get("to", [])
-        subject = str(self.details.get("subject", "Project group allocation"))
-        body = str(self.details.get("body", ""))
         if not recipients:
             messagebox.showinfo("Email group", "No recipient emails were found for this group.")
             return
-        mailto = f"mailto:{','.join(recipients)}?subject={quote(subject)}&body={quote(body)}"
-        if len(mailto) > 1800:
-            self.clipboard_clear()
-            self.clipboard_append(", ".join(recipients))
-            messagebox.showinfo(
-                "Email group",
-                "The email draft is too long for a mailto link. The recipient list has been copied to the clipboard instead.",
-            )
-            return
-        webbrowser.open(mailto)
+        messagebox.showinfo(
+            "Mock group email",
+            f"Demo mode only: prepared 1 group email for {len(recipients)} recipients. ",
+        )
+        self.parent_app.status_text.set(f"Mock email prepared for group {self.project}.")
 
 
 class MoveStudentDialog(tk.Toplevel):
@@ -682,7 +778,7 @@ class ProjectEditorDialog(tk.Toplevel):
         self.description = tk.StringVar(value=project["description"] if project else "")
         self.difficulty = tk.StringVar(value=project["difficulty"] if project else "medium")
         self.min_team_size = tk.IntVar(value=project["min_team_size"] if project else 4)
-        self.max_team_size = tk.IntVar(value=project["max_team_size"] if project else 5)
+        self.max_team_size = tk.IntVar(value=project["max_team_size"] if project else 8)
 
         row = 0
         for label, variable in [("Project ID", self.project_id), ("Project name", self.project_name), ("Description", self.description), ("Difficulty", self.difficulty)]:

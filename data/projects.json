@@ -5,120 +5,120 @@
       "project_name": "AI Tutor",
       "description": "An AI-powered tutoring assistant to support student learning and coursework guidance",
       "difficulty": "high",
-      "min_team_size": 5,
-      "max_team_size": 6
+      "min_team_size": 4,
+      "max_team_size": 8
     },
     {
       "project_id": "P02",
       "project_name": "Campus App",
       "description": "A mobile app to centralize campus services such as maps, schedules, and notifications",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
       "project_id": "P03",
       "project_name": "Sustainability Dashboard",
       "description": "A data dashboard that tracks campus sustainability metrics and energy usage",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
       "project_id": "P04",
       "project_name": "Health Tracker",
       "description": "A personal health and wellbeing tracking application for students",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
       "project_id": "P05",
       "project_name": "Smart Parking System",
       "description": "A system that predicts parking availability on campus using sensor data",
       "difficulty": "high",
-      "min_team_size": 5,
-      "max_team_size": 6
+      "min_team_size": 4,
+      "max_team_size": 8
     },
     {
       "project_id": "P06",
       "project_name": "Study Group Matcher",
       "description": "A platform that automatically matches students into study groups based on courses and interests",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
       "project_id": "P07",
       "project_name": "Library Seat Finder",
       "description": "A real-time system showing available study spaces in the university library",
       "difficulty": "low",
-      "min_team_size": 3,
-      "max_team_size": 4
+      "min_team_size": 2,
+      "max_team_size": 5
     },
     {
       "project_id": "P08",
       "project_name": "AI Resume Coach",
       "description": "An AI tool that helps students improve resumes and prepare for job applications",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
       "project_id": "P09",
       "project_name": "Event Recommendation Engine",
       "description": "A recommendation system for campus events based on student interests",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
-      "project_id": "P10",
+      "project_id": "P8",
       "project_name": "Mental Health Chatbot",
       "description": "A conversational chatbot providing mental health resources and support",
       "difficulty": "high",
-      "min_team_size": 5,
-      "max_team_size": 6
+      "min_team_size": 4,
+      "max_team_size": 8
     },
     {
       "project_id": "P11",
       "project_name": "Food Waste Tracker",
       "description": "A system that monitors and reduces food waste in campus cafeterias",
       "difficulty": "low",
-      "min_team_size": 3,
-      "max_team_size": 4
+      "min_team_size": 2,
+      "max_team_size": 5
     },
     {
       "project_id": "P12",
       "project_name": "Course Planner Assistant",
       "description": "An intelligent tool that helps students plan degree pathways and schedules",
       "difficulty": "medium",
-      "min_team_size": 4,
-      "max_team_size": 5
+      "min_team_size": 3,
+      "max_team_size": 7
     },
     {
       "project_id": "P13",
       "project_name": "Research Collaboration Platform",
       "description": "A platform that connects students with research projects and supervisors",
       "difficulty": "high",
-      "min_team_size": 5,
-      "max_team_size": 6
+      "min_team_size": 4,
+      "max_team_size": 8
     },
     {
       "project_id": "P14",
       "project_name": "Energy Optimization System",
       "description": "A system that analyzes and optimizes energy consumption in campus buildings",
       "difficulty": "high",
-      "min_team_size": 5,
-      "max_team_size": 6
+      "min_team_size": 4,
+      "max_team_size": 8
     },
     {
       "project_id": "P15",
       "project_name": "Peer Mentorship Network",
       "description": "A digital platform that connects new students with peer mentors",
       "difficulty": "low",
-      "min_team_size": 3,
-      "max_team_size": 4
+      "min_team_size": 2,
+      "max_team_size": 5
     }
   ]
 }
