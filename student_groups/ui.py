@@ -478,8 +478,8 @@ class StudentManagerDialog(tk.Toplevel):
         frame.rowconfigure(1, weight=1)
 
         ttk.Label(frame, text="Students", font=("Segoe UI Semibold", 14)).grid(row=0, column=0, sticky="w")
-        self.tree = ttk.Treeview(frame, columns=("id", "name", "gender", "major", "pref1", "pref2", "pref3"), show="headings", height=14)
-        for column, label, width in [("id", "Student ID", 90), ("name", "Name", 160), ("gender", "Gender", 80), ("major", "Major", 140), ("pref1", "Pref 1", 130), ("pref2", "Pref 2", 130), ("pref3", "Pref 3", 130)]:
+        self.tree = ttk.Treeview(frame, columns=("id", "name", "gender", "project", "major", "pref2", "pref3"), show="headings", height=14)
+        for column, label, width in [("id", "Student ID", 90), ("name", "Name", 160), ("gender", "Gender", 80), ("project", "Project", 150), ("major", "Major", 140), ("pref2", "Pref 2", 130), ("pref3", "Pref 3", 130)]:
             self.tree.heading(column, text=label)
             self.tree.column(column, width=width, anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
@@ -497,7 +497,7 @@ class StudentManagerDialog(tk.Toplevel):
         for item in self.tree.get_children():
             self.tree.delete(item)
         for student in self.students:
-            self.tree.insert("", "end", iid=student["StudentID"], values=(student["StudentID"], student["Name"], student["Gender"], student["Major"], student["PreferredProject1"], student["PreferredProject2"], student["PreferredProject3"]))
+            self.tree.insert("", "end", iid=student["StudentID"], values=(student["StudentID"], student["Name"], student["Gender"], student["PreferredProject1"], student["Major"], student["PreferredProject2"], student["PreferredProject3"]))
 
     def _selected_student(self) -> dict | None:
         selection = self.tree.selection()
